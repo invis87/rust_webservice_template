@@ -1,5 +1,3 @@
-#[macro_use]
-extern crate slog;
 extern crate actix_web;
 #[macro_use]
 extern crate serde_derive;
@@ -11,26 +9,23 @@ extern crate reqwest;
 
 mod data;
 mod handlers;
-mod logging;
 
 use actix_rt;
 use actix_web::{get, http, middleware, post, App, HttpServer};
 use actix_web::{web, HttpResponse, Responder};
 use data::*;
-
-pub struct AppState {
-    log: slog::Logger,
-}
+use log::{info, warn};
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
-    let log = logging::setup_logging();
-    info!(log, "Starting server on localhost:8080");
+    std::env::set_var("RUST_LOG", "jira_game=info,actix_web=info");
+    env_logger::init();
+    info!("Starting server on localhost:8080");
 
     HttpServer::new(move || {
         App::new()
+            .wrap(middleware::Logger::default())
             .data(web::JsonConfig::default().limit(4096)) //limit size of the payload (global configuration)
-            .data(AppState { log: log.clone() })
             .service(index)
             .service(create_user)
             .default_service(web::to(HttpResponse::NotFound))
@@ -41,19 +36,12 @@ async fn main() -> std::io::Result<()> {
 }
 
 #[get("/{id}/{name}/index.html")]
-async fn index(app_state: web::Data<AppState>, info: web::Path<(u32, String)>) -> impl Responder {
-    let log: &slog::Logger = &app_state.log;
-    info!(log, "index request");
+async fn index(info: web::Path<(u32, String)>) -> impl Responder {
     format!("Hello {}! id:{}", info.1, info.0)
 }
 
 #[post("/create_user")]
-async fn create_user(
-    app_state: web::Data<AppState>,
-    request: web::Json<CreateUserRequest>,
-) -> impl Responder {
-    let log: &slog::Logger = &app_state.log;
-    info!(log, "create user request {:?}", request);
+async fn create_user(request: web::Json<CreateUserRequest>) -> impl Responder {
     format!("user '{}' created!", request.name)
 }
 
@@ -66,14 +54,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_index() -> Result<(), Error> {
-        let mut app = test::init_service(
-            App::new()
-                .data(AppState {
-                    log: logging::setup_logging(),
-                })
-                .service(create_user),
-        )
-        .await;
+        let mut app = test::init_service(App::new().service(create_user)).await;
 
         let req = test::TestRequest::post()
             .uri("/create_user")

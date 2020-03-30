@@ -1,5 +1,5 @@
 [package]
-name = "api-service"
+name = "jira-game"
 version = "0.1.0"
 authors = ["Aleksandrov Vladimir <invis87@gmail.com>"]
 edition = "2018"
@@ -16,6 +16,5 @@ futures = "^0.3"
 failure = "^0.1"
 async-std = "^1.5"
 
-slog = "^2"
-slog-term = "^2"
-slog-async = "^2"
+log = "^0.4"
+env_logger = "^0.7"

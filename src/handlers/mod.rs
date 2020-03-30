@@ -1,5 +1,3 @@
-use super::AppState;
-
 use actix_web::{Error, HttpRequest, HttpResponse};
 use std::thread;
 use std::time::Duration;
