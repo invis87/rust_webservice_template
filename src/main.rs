@@ -16,6 +16,15 @@ use actix_web::{web, HttpResponse, Responder};
 use data::*;
 use log::{info, warn};
 
+#[inline]
+fn fibonacci(n: u64) -> u64 {
+    match n {
+        0 => 1,
+        1 => 1,
+        n => fibonacci(n - 1) + fibonacci(n - 2),
+    }
+}
+
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", "jira_game=info,actix_web=info");
