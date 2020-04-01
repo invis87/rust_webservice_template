@@ -7,53 +7,103 @@ extern crate serde_json;
 extern crate failure;
 extern crate reqwest;
 
+#[macro_use]
+extern crate diesel;
+extern crate dotenv;
+
+use diesel::pg::PgConnection;
+use diesel::r2d2::{self, ConnectionManager};
+use dotenv::dotenv;
+use std::env;
+
 mod data;
+mod db_actions;
 mod handlers;
+mod models;
+mod schema;
 
 use actix_rt;
-use actix_web::{get, http, middleware, post, App, HttpServer};
+use actix_web::{get, http, middleware, post, App, Error, HttpServer};
 use actix_web::{web, HttpResponse, Responder};
 use data::*;
-use log::{info, warn};
+use log::{debug, error, info};
 
-#[inline]
-fn fibonacci(n: u64) -> u64 {
-    match n {
-        0 => 1,
-        1 => 1,
-        n => fibonacci(n - 1) + fibonacci(n - 2),
-    }
-}
+type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
-    std::env::set_var("RUST_LOG", "jira_game=info,actix_web=info");
+    std::env::set_var("RUST_LOG", "jira_game=debug,actix_web=info");
     env_logger::init();
-    info!("Starting server on localhost:8080");
+    dotenv().ok();
 
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    debug!("Trying to establish DB connection to '{}'", database_url);
+    let db_connection_manager = ConnectionManager::<PgConnection>::new(database_url);
+    let db_pool = r2d2::Pool::builder()
+        .build(db_connection_manager)
+        .expect("Failed to create db pool");
+
+    let bind_address = "0.0.0.0:8080";
+    info!("Starting server on '{}'", bind_address);
     HttpServer::new(move || {
         App::new()
+            .data(db_pool.clone())
             .wrap(middleware::Logger::default())
             .data(web::JsonConfig::default().limit(4096)) //limit size of the payload (global configuration)
-            .service(index)
+            .service(get_user)
             .service(create_user)
+            .service(create_ticket)
             .default_service(web::to(HttpResponse::NotFound))
     })
-    .bind("0.0.0.0:8080")?
+    .bind(bind_address)?
     .run()
     .await
 }
 
-#[get("/{id}/{name}/index.html")]
-async fn index(info: web::Path<(u32, String)>) -> impl Responder {
-    format!("Hello {}! id:{}", info.1, info.0)
-}
-
 #[post("/create_user")]
-async fn create_user(request: web::Json<CreateUserRequest>) -> impl Responder {
-    format!("user '{}' created!", request.name)
+async fn create_user(
+    pool: web::Data<DbPool>,
+    request: web::Json<CreateUserRequest>,
+) -> Result<HttpResponse, Error> {
+    let conn = pool.get().expect("couldn't get db connection from pool");
+    let user_id = web::block(move || db_actions::insert_user(&request.name, &conn))
+        .await
+        .map_err(|e| {
+            error!("{}", e);
+            HttpResponse::InternalServerError().finish()
+        })?;
+
+    Ok(HttpResponse::Ok().json(CreateUserResponse { id: user_id }))
 }
 
+#[post("/create_ticket")]
+async fn create_ticket(request: web::Json<CreateTicketRequest>) -> Result<HttpResponse, Error> {
+    HttpResponse::Ok().await
+}
+
+#[get("/user/{user_id}")]
+async fn get_user(
+    pool: web::Data<DbPool>,
+    user_id_param: web::Path<i32>,
+) -> Result<HttpResponse, Error> {
+    let conn = pool.get().expect("couldn't get db connection from pool");
+    let user_id = user_id_param.into_inner();
+    let user = web::block(move || db_actions::get_user(user_id, &conn))
+        .await
+        .map_err(|e| {
+            error!("{}", e);
+            HttpResponse::InternalServerError().finish()
+        })?;
+
+    let result = match user {
+        None => HttpResponse::NotFound().body(format!("No user found with id '{}'", user_id)),
+        Some(u) => HttpResponse::Ok().json(u),
+    };
+
+    Ok(result)
+}
+
+// ============================== tests ==============================
 #[cfg(test)]
 mod tests {
     use super::*;

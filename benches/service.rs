@@ -3,7 +3,23 @@ use awc::Client;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures::future::join_all;
 
-use jira_game::fibonacci;
+#[inline]
+pub fn fibonacci(n: u64) -> u64 {
+    let mut a = 0;
+    let mut b = 1;
+
+    match n {
+        0 => b,
+        _ => {
+            for _ in 0..n {
+                let c = a + b;
+                a = b;
+                b = c;
+            }
+            b
+        }
+    }
+}
 
 pub fn fibbo_bench(c: &mut Criterion) {
     c.bench_function("fib 20", |b| b.iter(|| fibonacci(black_box(20))));
