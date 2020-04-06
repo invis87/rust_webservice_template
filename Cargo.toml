@@ -1,5 +1,5 @@
 [package]
-name = "jira-game"
+name = "web_service_template"
 version = "0.1.0"
 authors = ["Aleksandrov Vladimir <invis87@gmail.com>"]
 edition = "2018"

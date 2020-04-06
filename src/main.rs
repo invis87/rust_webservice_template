@@ -32,7 +32,7 @@ type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
-    std::env::set_var("RUST_LOG", "jira_game=debug,actix_web=info");
+    std::env::set_var("RUST_LOG", "web_service_template=debug,actix_web=error");
     env_logger::init();
     dotenv().ok();
 
